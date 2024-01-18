@@ -1,0 +1,87 @@
+---
+title: "Project Data"
+author: "Jed Green"
+date: "2024-01-18"
+output:
+  word_document: default
+  html_document: default
+---
+
+This my attempt at an R Markdown script. I hope this will make the data more reproducible. 
+
+Below is a list of all the packages I used: 
+
+```{r}
+library(haven)
+library(gmodels)
+library(rcompanion)
+library(chisq.posthoc.test)
+library(stargazer)
+library(ggplot2)
+library(tidyverse)
+library(xtable)
+library(AICcmodavg)
+library(rmarkdown)
+```
+
+As all of our data comes from the longitudinal C19PRC_Uk survey our first step is to merge All of the waves together.
+
+```{r}
+### Reading in all databases:
+
+df<-read_sav("C19PRC_UKW1W2_archive_final.sav")
+df1<-read_sav("C19PRC_UK_W3_archive_final.sav")
+df2<-read_sav("C19PRC_UK_W4_archive_final.sav")
+df3<-read_sav("C19PRC_UKW5_archive_final.sav")
+df4<-read_sav("C19PRC_UK_W6_archive_final.sav")
+
+### Making the databases contain only variables needed:
+
+ldf1<-as.data.frame(cbind(df1$pid,df1$W3_Type))
+colnames(ldf1)<-c("pid","W3_Type")
+
+ldf2<-as.data.frame(cbind(df2$pid,df2$W4_Type))
+colnames(ldf2)<-c("pid","W4_Type")
+
+ldf3<-as.data.frame(cbind(df3$pid,df3$W5_Type))
+colnames(ldf3)<-c("pid","W5_Type")
+
+ldf4<-as.data.frame(cbind(df4$pid,df4$W6_Type))
+colnames(ldf4)<-c("pid","W6_Type")
+
+
+### Merging datasets:
+
+mdf1<-merge.data.frame(df,ldf1, by ="pid", all = T)
+mdf2<-merge.data.frame(mdf1,ldf2, by ="pid", all = T)
+mdf3<-merge.data.frame(mdf2,ldf3, by ="pid", all = T)
+mdf4<-merge.data.frame(mdf3,ldf4, by ="pid", all = T)
+```
+
+Now we have done that we can run some descriptive statistics
+
+```{r}
+hist(df$W1_Depression_Total,
+     breaks = 30,
+     xlim = c(0,30),
+     ylim = c(0,800),
+     xlab = "PHQ-9 Total Test Score",
+     main = "Histogram of PHQ-9 Total Test Score")
+```
+```{r}
+
+table(mdf4$W1_Dep_Severity)
+data <- c(378, 227, 154, 1199, 67)
+categories <- c("Mild", "Moderate", "Moderately Severe", "None minimal", "Severe")
+
+# Create a data frame
+BP1 <- data.frame(Category = categories, Count = data)
+
+# Sort the data frame by Count in descending order
+BP1 <- BP1[order(-BP1$Count), ]
+
+# Create the bar plot
+barplot(BP1$Count, names.arg = BP1$Category, main = "Bar Plot with Descending Bars",
+        xlab = "Level of severity", ylab = "Frequency")
+```
+ 

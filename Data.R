@@ -40,12 +40,29 @@ barplot(prop.table(table(df$W1_Voted_GenElection_YorN)),
         of People Who Said They Voted in 
         The Last General Election")
 
+table(mdf4$W1_Dep_Severity)
+
+
 hist(df$W1_Overall_Trust,
      breaks = 35,
      xlim = c(7,35),
      ylim = c(0,250),
      xlab = "Trust Total Score",
      main = "Histogram of Trust Total Score")
+
+table(mdf4$W1_Dep_Severity)
+data <- c(378, 227, 154, 1199, 67)
+categories <- c("Mild", "Moderate", "Moderately Severe", "None minimal", "Severe")
+
+# Create a data frame
+BP1 <- data.frame(Category = categories, Count = data)
+
+# Sort the data frame by Count in descending order
+BP1 <- BP1[order(-BP1$Count), ]
+
+# Create the bar plot
+barplot(BP1$Count, names.arg = BP1$Category, main = "Bar Plot with Descending Bars",
+        xlab = "Category", ylab = "Count")
 
 hist(df$W1_GAD_Total,
      breaks = 21,
@@ -944,3 +961,4 @@ wave_table <- xtable(wave_data)
 
 # Print the LaTeX code
 print(wave_table, caption = "Summary of Severity Levels by Waves", label = "tab:severity_waves", caption.placement = "top")
+
