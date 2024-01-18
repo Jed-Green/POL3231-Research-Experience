@@ -84,4 +84,103 @@ BP1 <- BP1[order(-BP1$Count), ]
 barplot(BP1$Count, names.arg = BP1$Category, main = "Bar Plot with Descending Bars",
         xlab = "Level of severity", ylab = "Frequency")
 ```
- 
+
+Next lets create our dependent variable
+
+```{r}
+mdf4$W1_Dep_Severity <- NA
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 0 &mdf4$W1_Depression_Total <= 4 ] <- "None minimal"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 5 & mdf4$W1_Depression_Total <= 9 ] <- "Mild"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 10 & mdf4$W1_Depression_Total <= 14] <- "Moderate"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 15 & mdf4$W1_Depression_Total <= 19] <- "Moderately Severe"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 20 & mdf4$W1_Depression_Total <= 27] <- "Severe"
+```
+
+Here is us creating one of our independent variables: Number of waves completed in a row
+
+```{r}
+### Re-coding variable: answering waves one after another in order:
+table(mdf4$W1_Present)
+mdf4$presentwave1_2 <- ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1,1,0)
+mdf4$presentwave1_2_3 <-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0,1,0)
+mdf4$presentwave1_2_3_4<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1,1,0)
+mdf4$presentwave1_2_3_4_5<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1 & mdf4$W5_Type == 1,1,0)
+mdf4$presentwave1_2_3_4_5_6<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type 
+                                    == 1 & mdf4$W5_Type == 1 & mdf4$W6_Type == 1,1,0)
+
+### Putting previous variable into a matrix
+
+tab <- matrix(c(2025,1406, 950, 771, 677, 582), ncol=1, byrow=TRUE)
+rownames(tab) <- c('Wave 1','Wave 2','Wave 3','Wave 4','Wave 5','Wave 6')
+colnames(tab) <- c('Present')
+tabdf<-as.data.frame(tab)
+tabdf$Waves <- rownames(tabdf)
+
+### Plots for Attrition between waves:
+
+ggplot(tabdf, aes(x = Waves, y = Present, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Frequency by Waves", x = "Waves", y = "Present") +
+  theme_minimal()
+```
+
+Now lets create a matrix between depression severity and number of waves completed in a row
+```{r}
+### Depression and wave attrition
+table(mdf4$W1_Present, mdf4$W1_Dep_Severity)
+table(mdf4$presentwave1_2, mdf4$W1_Dep_Severity)
+table(mdf4$presentwave1_2_3, mdf4$W1_Dep_Severity)
+table(mdf4$presentwave1_2_3_4, mdf4$W1_Dep_Severity)
+table(mdf4$presentwave1_2_3_4_5,mdf4$W1_Dep_Severity)
+table(mdf4$presentwave1_2_3_4_5_6,mdf4$W1_Dep_Severity)
+
+### Creating the data frame from the table
+
+wave_data <- data.frame(
+  Severity = c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)"),
+  Wave_1 = c(1199,  378, 227, 154, 67),
+  Wave_2 = c(896 , 243, 138, 95, 34),
+  Wave_3 = c(637, 163, 78, 59, 13),
+  Wave_4 = c(536, 124, 55, 47, 9),
+  Wave_5 = c(474, 107, 51, 37, 8),
+  Wave_6 = c(414, 91, 41, 28, 8)
+)
+```
+Now lets plot this
+```{r}
+### Making the graphs:
+
+wave_data_long <- pivot_longer(wave_data, cols = -Severity, names_to = "Wave_Number", values_to = "Frequency")
+
+custom_colors <- c("None minimal (0-4)" = "darkgreen", "Mild (5-9)"= "lightgreen","Moderate (10-14)" = "orange",
+                   "Moderately Severe (15-19)" = "red", "Severe (20-27)" = "darkred")
+legend_order <- c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)")
+
+### Plotting the line graph for Frequencies:
+
+ggplot(wave_data_long, aes(x = Wave_Number, y = Frequency, color = Severity, group = Severity)) +
+  geom_line() +
+  scale_color_manual(values = custom_colors, breaks = legend_order) +  # Assigning custom colors
+  labs(title = "Frequency of Depression Severity Levels Across Waves",
+       x = "Wave Number", y = "Frequency") +
+  theme_minimal()
+
+### Calculating percentages relative to Wave 1 for each severity level:
+
+wave_data_long <- wave_data_long %>%
+  group_by(Severity) %>%
+  mutate(Percentage = Frequency / Frequency[Wave_Number == "Wave_1"] * 100)
+
+###Plotting the line graph with percentages relative to Wave 1 on the y-axis:
+
+ggplot(wave_data_long, aes(x = Wave_Number, y = Percentage, color = Severity, group = Severity)) +
+  geom_line() +
+  scale_color_manual(values = custom_colors, breaks = legend_order) +  # Assigning custom colors and order
+  labs(title = "Percentage of Depression Severity Levels and those who answered consecutive waves 
+       Relative to Wave 1",
+       x = "Wave Number", y = "Percentage") +
+  theme_minimal() +
+  ylim(0,100)
+```
+
