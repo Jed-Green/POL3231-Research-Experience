@@ -4,12 +4,12 @@ author: "Jed Green"
 date: "2024-01-18"
 output:
   word_document: default
-  html_document: default
+  pdf_document: default
 ---
 
-This my attempt at an R Markdown script. I hope this will make the data more reproducible. 
+This my attempt at an R Markdown script. I hope this will make the data more reproducible.
 
-Below is a list of all the packages I used: 
+Below is a list of all the packages I used:
 
 ```{r}
 library(haven)
@@ -22,12 +22,13 @@ library(tidyverse)
 library(xtable)
 library(AICcmodavg)
 library(rmarkdown)
+library(tinytex)
 ```
 
-As all of our data comes from the longitudinal C19PRC_Uk survey our first step is to merge All of the waves together.
+As all of our data comes from the longitudinal C19PRC_Uk survey our first step is to merge all of the waves together. The first step is to read in all the different .sav files containing all of the data from the different waves. We did this using "read_sav" from the package Haven as R cannot naturally read in .sav files. The second step was to extract only the variables that are necessary as the data set would be too large if we merged everything. The two variables from each subsequent data set that We selected was "PID" and the "Wave type". This is because the "PID" variable allows us to merge the data based on individuals as each respondent has a unique "PID". In addition we needed the "Wave type" variable from each wave in order to identify who was a recontact and who was a respondent. Finally we merged the data by the "PID" variable in order to get all of our Data into one data set.
 
 ```{r}
-### Reading in all databases:
+### Step 1: Reading in all databases:
 
 df<-read_sav("C19PRC_UKW1W2_archive_final.sav")
 df1<-read_sav("C19PRC_UK_W3_archive_final.sav")
@@ -35,7 +36,7 @@ df2<-read_sav("C19PRC_UK_W4_archive_final.sav")
 df3<-read_sav("C19PRC_UKW5_archive_final.sav")
 df4<-read_sav("C19PRC_UK_W6_archive_final.sav")
 
-### Making the databases contain only variables needed:
+### Step 2: Making the databases contain only variables needed:
 
 ldf1<-as.data.frame(cbind(df1$pid,df1$W3_Type))
 colnames(ldf1)<-c("pid","W3_Type")
@@ -50,7 +51,7 @@ ldf4<-as.data.frame(cbind(df4$pid,df4$W6_Type))
 colnames(ldf4)<-c("pid","W6_Type")
 
 
-### Merging datasets:
+### Step 3: Merging data sets:
 
 mdf1<-merge.data.frame(df,ldf1, by ="pid", all = T)
 mdf2<-merge.data.frame(mdf1,ldf2, by ="pid", all = T)
@@ -58,9 +59,70 @@ mdf3<-merge.data.frame(mdf2,ldf3, by ="pid", all = T)
 mdf4<-merge.data.frame(mdf3,ldf4, by ="pid", all = T)
 ```
 
-Now we have done that we can run some descriptive statistics
+The next step now that we have merged all of our data together is insert values for the missing data. As both the "Present" and "Wave Type" variable are unique to each wave to creates a lot NA's when we merge them together.  Therefore, we replaced all the NA's with -99 values. This allows for them to be represented in our analysis.
 
 ```{r}
+mdf4$W1_Present[is.na(mdf4$W1_Present)]<--99
+mdf4$W2_Present[is.na(mdf4$W2_Present)]<--99
+mdf4$W3_Type[is.na(mdf4$W3_Type)]<--99
+mdf4$W4_Type[is.na(mdf4$W4_Type)]<--99
+mdf4$W5_Type[is.na(mdf4$W5_Type)]<--99
+mdf4$W6_Type[is.na(mdf4$W6_Type)]<--99
+```
+
+Now we have edited our data we need to tidy and clean it. First lets create a new variable that separates the PHQ-9 variable into the different depression severity levels. This will go on to form our dependent variable.
+
+```{r}
+### creating Depression severity variable
+
+mdf4$W1_Dep_Severity <- NA
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 0 &mdf4$W1_Depression_Total <= 4 ] <- "None minimal"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 5 & mdf4$W1_Depression_Total <= 9 ] <- "Mild"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 10 & mdf4$W1_Depression_Total <= 14] <- "Moderate"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 15 & mdf4$W1_Depression_Total <= 19] <- "Moderately Severe"
+mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 20 & mdf4$W1_Depression_Total <= 27] <- "Severe"
+```
+
+Next lets create some variables to identify how many people attended each wave consecutively. In order to do this we used the wave type and present variable for each wave. For the first two waves there were no top-up respondents and therefore we can use the W1_present and W2_present variables in order to calculate the number of people who were present in wave 1 and then attend wave 2. For subsequent waves it gets more complex as top ups are introduced. Therefore from wave 3 onwards we use each individual wave type variable to identify if they are a recontact or a top up respondent. For all waves (except wave 3) if the Wave type variable is = 1 then it means that they were a recontact (for wave 3 if they were a recontact wave3 type = 0). 
+
+```{r}
+### Re-coding variable: answering waves one after another in order:
+mdf4$presentwave1<- ifelse(mdf4$W1_Present == 1,1,0)
+mdf4$presentwave1_2 <- ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1,1,0)
+mdf4$presentwave1_2_3 <-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0,1,0)
+mdf4$presentwave1_2_3_4<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1,1,0)
+mdf4$presentwave1_2_3_4_5<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1 & mdf4$W5_Type == 1,1,0)
+mdf4$presentwave1_2_3_4_5_6<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type 
+                                    == 1 & mdf4$W5_Type == 1 & mdf4$W6_Type == 1,1,0)
+```
+
+Now we have created these new variables we can now create tables out them. The sum of each table is equal to the total number of contacts across all six waves (both Top-Ups and Recontacts) which is 5364. The results under 0 in each table equal to the total number of Top-Ups and those who drop out at each stage of the survey process. The results under 1 in each table is the total number of people who completed each wave up until and including the last one listed. Therefore, if we were to subtract the total number of Top-Up contacts (3339) from the 0 value in each table we would be left with the number of drop outs between each wave - and this is what we find. 
+
+```{r}
+### Printing each variable in a table
+table(mdf4$presentwave1)
+table(mdf4$presentwave1_2)
+table(mdf4$presentwave1_2_3)
+table(mdf4$presentwave1_2_3_4)
+table(mdf4$presentwave1_2_3_4_5)
+table(mdf4$presentwave1_2_3_4_5_6)
+```
+
+Now we can input the values generated from this filtering into its own matrix. We did this by running each variable and inputting each of the successful test cases (ie. output = 1) into a matrix. This matrix was then converted into a data frame. This data frame represents the number of people who attended each wave without missing one. 
+
+```{r}
+Waves_attended_consecutively <- matrix(c(2025,1406, 950, 771, 677, 582), ncol=1, byrow=TRUE)
+rownames(Waves_attended_consecutively) <- c('Wave 1','Wave 2','Wave 3','Wave 4','Wave 5','Wave 6')
+colnames(Waves_attended_consecutively) <- c('Present')
+Waves_attended_consecutivelydf<-as.data.frame(Waves_attended_consecutively)
+Waves_attended_consecutivelydf$Waves <- rownames(Waves_attended_consecutivelydf)
+```
+
+Now that we have made collated and cleaned our data we can now create some initial descriptive statistics. Lets first explore the distribution of depression amount wave 1 respondents. Below we have two graphs, both use the PHQ-9 variable. The first is a scale 1-27 the second is the distribution split into the different severity levels.
+
+```{r}
+# Graph 1: Depression PHQ-9 scale
+
 hist(df$W1_Depression_Total,
      breaks = 30,
      xlim = c(0,30),
@@ -68,7 +130,9 @@ hist(df$W1_Depression_Total,
      xlab = "PHQ-9 Total Test Score",
      main = "Histogram of PHQ-9 Total Test Score")
 ```
+
 ```{r}
+#Graph 2: Depression severity 
 
 table(mdf4$W1_Dep_Severity)
 data <- c(378, 227, 154, 1199, 67)
@@ -85,56 +149,33 @@ barplot(BP1$Count, names.arg = BP1$Category, main = "Bar Plot with Descending Ba
         xlab = "Level of severity", ylab = "Frequency")
 ```
 
-Next lets create our dependent variable
+Graph 3 below shows the attrition rate of between waves. Reminder that this represents those who did not complete the waves in order
 
 ```{r}
-mdf4$W1_Dep_Severity <- NA
-mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 0 &mdf4$W1_Depression_Total <= 4 ] <- "None minimal"
-mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 5 & mdf4$W1_Depression_Total <= 9 ] <- "Mild"
-mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 10 & mdf4$W1_Depression_Total <= 14] <- "Moderate"
-mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 15 & mdf4$W1_Depression_Total <= 19] <- "Moderately Severe"
-mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 20 & mdf4$W1_Depression_Total <= 27] <- "Severe"
-```
+### Graph 3: Attrition between waves:
 
-Here is us creating one of our independent variables: Number of waves completed in a row
-
-```{r}
-### Re-coding variable: answering waves one after another in order:
-table(mdf4$W1_Present)
-mdf4$presentwave1_2 <- ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1,1,0)
-mdf4$presentwave1_2_3 <-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0,1,0)
-mdf4$presentwave1_2_3_4<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1,1,0)
-mdf4$presentwave1_2_3_4_5<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1 & mdf4$W5_Type == 1,1,0)
-mdf4$presentwave1_2_3_4_5_6<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type 
-                                    == 1 & mdf4$W5_Type == 1 & mdf4$W6_Type == 1,1,0)
-
-### Putting previous variable into a matrix
-
-tab <- matrix(c(2025,1406, 950, 771, 677, 582), ncol=1, byrow=TRUE)
-rownames(tab) <- c('Wave 1','Wave 2','Wave 3','Wave 4','Wave 5','Wave 6')
-colnames(tab) <- c('Present')
-tabdf<-as.data.frame(tab)
-tabdf$Waves <- rownames(tabdf)
-
-### Plots for Attrition between waves:
-
-ggplot(tabdf, aes(x = Waves, y = Present, group = 1)) +
+ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Present, group = 1)) +
   geom_line(color = "blue") +
   geom_point(color = "blue", size = 3) +
   labs(title = "Frequency by Waves", x = "Waves", y = "Present") +
   theme_minimal()
 ```
 
-Now lets create a matrix between depression severity and number of waves completed in a row
-```{r}
-### Depression and wave attrition
-table(mdf4$W1_Present, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4_5,mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4_5_6,mdf4$W1_Dep_Severity)
+Our next step now that we have conducted some initial descriptive statistics is to compare the attrition rate between the different levels of depression severity. In order to do that we need to calculate the figures. We did this by creating tables showing the respondents who were were present at each wave (and present at all subsequent waves) and their wave 1 depression severity level. For each of the tables below values under the "0" Row represent all those who had dropped out/missed a survey. All values under the "1" row represent all respondents who have completed every survey up to and including the last number listed in the variable. This allows us to see all those who completed all surveys and their given depression severity. Finally the tables also have total columns so that we ensure that "0" and "1" rows add up to the total number contacts at wave one (2025) as this is the baseline from which we are measuring attrition. 
 
+```{r}
+### Depression and wave attrition tables
+addmargins(table(mdf4$presentwave1, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4_5,mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4_5_6,mdf4$W1_Dep_Severity),2)
+```
+
+As we have calculated all those present at each wave and their depression severity level we can put this information into a data frame so that we can plot it. The figures for each row (as discussed above) are just the figures in the "1" Row i.e have completed every survey up to and including the last number listed in the variable. 
+
+```{r}
 ### Creating the data frame from the table
 
 wave_data <- data.frame(
@@ -144,34 +185,51 @@ wave_data <- data.frame(
   Wave_3 = c(637, 163, 78, 59, 13),
   Wave_4 = c(536, 124, 55, 47, 9),
   Wave_5 = c(474, 107, 51, 37, 8),
-  Wave_6 = c(414, 91, 41, 28, 8)
-)
+  Wave_6 = c(414, 91, 41, 28, 8))
 ```
-Now lets plot this
+
+With the Data frame created above we can now plot this information. In order to do this we used the ggplot2 and the tidyr package. Our First step was to us the pivot_longer() command which takes our original wide-format data frame wave_data and converts it into a long-format data frame called wave_data_long, where the wave numbers are stacked in a single column named Wave_Number, and the corresponding frequencies are stacked in another column named Frequency. This transformation allows us to then plot this new data frame. 
+
 ```{r}
-### Making the graphs:
+### Converting into a long-format data frame:
 
 wave_data_long <- pivot_longer(wave_data, cols = -Severity, names_to = "Wave_Number", values_to = "Frequency")
+```
 
+Next we created some values in order to help organise our visualisation code. These where just the colors of each level of depression and the order of the legend. 
+
+```{r}
 custom_colors <- c("None minimal (0-4)" = "darkgreen", "Mild (5-9)"= "lightgreen","Moderate (10-14)" = "orange",
                    "Moderately Severe (15-19)" = "red", "Severe (20-27)" = "darkred")
 legend_order <- c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)")
+```
 
+Below is the code used to create our first results graph. It has the frequency plotted on the Y axis and the number of waves attended in order on the X axis. It is then grouped by Wave 1 depression severity. 
+
+```{r}
 ### Plotting the line graph for Frequencies:
 
 ggplot(wave_data_long, aes(x = Wave_Number, y = Frequency, color = Severity, group = Severity)) +
   geom_line() +
   scale_color_manual(values = custom_colors, breaks = legend_order) +  # Assigning custom colors
   labs(title = "Frequency of Depression Severity Levels Across Waves",
-       x = "Wave Number", y = "Frequency") +
+       x = "Waves attended in order", y = "Frequency") +
   theme_minimal()
+```
 
+Whilst the graph above is great it might be better to visualise our data reactivate to wave 1. Therefore we need to mutate the frequency column in order to turn it into a percentage. 
+
+```{r}
 ### Calculating percentages relative to Wave 1 for each severity level:
 
 wave_data_long <- wave_data_long %>%
   group_by(Severity) %>%
   mutate(Percentage = Frequency / Frequency[Wave_Number == "Wave_1"] * 100)
+```
 
+Now we can re-plot the data but this time have percentage instead of frequency represented on the Y axis. 
+
+```{r}
 ###Plotting the line graph with percentages relative to Wave 1 on the y-axis:
 
 ggplot(wave_data_long, aes(x = Wave_Number, y = Percentage, color = Severity, group = Severity)) +
@@ -182,5 +240,16 @@ ggplot(wave_data_long, aes(x = Wave_Number, y = Percentage, color = Severity, gr
        x = "Wave Number", y = "Percentage") +
   theme_minimal() +
   ylim(0,100)
+```
+
+Finally below is the code for an anvoa test using the data from our long-format data frame in order to test for significance. After this we run a Tukey Post-Hoc test in order to compare the means of every treatment to the means of every other treatment.
+
+```{r}
+### ANOVA of above data
+
+two.way<-aov(wave_data_long$Percentage~wave_data_long$Severity+ wave_data_long$Wave_Number)
+summary(two.way)
+
+TukeyHSD(two.way)
 ```
 

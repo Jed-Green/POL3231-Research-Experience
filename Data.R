@@ -8,9 +8,10 @@ library(tidyverse)
 library(xtable)
 library(AICcmodavg)
 library(rmarkdown)
-
+library(tinytex)
 
 df<-read_sav("C19PRC_UKW1W2_archive_final.sav")
+
 
 
 ### Descriptive statistics:
@@ -387,32 +388,46 @@ mdf4$W1_Dep_Severity[mdf4$W1_Depression_Total >= 20 & mdf4$W1_Depression_Total <
 table(mdf4$W1_Dep_Severity)
 
 ### Re-coding variable: answering waves one after another in order:
-table(mdf4$W1_Present)
+mdf4$W1_Present[is.na(mdf4$W1_Present)]<--99
+mdf4$W2_Present[is.na(mdf4$W2_Present)]<--99
+mdf4$W3_Type[is.na(mdf4$W3_Type)]<--99
+mdf4$W4_Type[is.na(mdf4$W4_Type)]<--99
+mdf4$W5_Type[is.na(mdf4$W5_Type)]<--99
+mdf4$W6_Type[is.na(mdf4$W6_Type)]<--99
+
+
+
+mdf4$presentwave1<- ifelse(mdf4$W1_Present == 1,1,0)
 mdf4$presentwave1_2 <- ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1,1,0)
 mdf4$presentwave1_2_3 <-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0,1,0)
 mdf4$presentwave1_2_3_4<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1,1,0)
 mdf4$presentwave1_2_3_4_5<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type == 1 & mdf4$W5_Type == 1,1,0)
 mdf4$presentwave1_2_3_4_5_6<-ifelse(mdf4$W1_Present == 1 & mdf4$W2_Present == 1 & mdf4$W3_Type == 0 & mdf4$W4_Type 
                                     == 1 & mdf4$W5_Type == 1 & mdf4$W6_Type == 1,1,0)
-
+table(mdf4$presentwave1)
+table(mdf4$presentwave1_2)
+table(mdf4$presentwave1_2_3)
+table(mdf4$presentwave1_2_3_4)
+table(mdf4$presentwave1_2_3_4_5)
+table(mdf4$presentwave1_2_3_4_5_6)
 ### Putting previous variable into a matrix
 
-tab <- matrix(c(2025,1406, 950, 771, 677, 582), ncol=1, byrow=TRUE)
-rownames(tab) <- c('Wave 1','Wave 2','Wave 3','Wave 4','Wave 5','Wave 6')
-colnames(tab) <- c('Present')
-tabdf<-as.data.frame(tab)
-tabdf$Waves <- rownames(tabdf)
+Waves_attended_consecutively <- matrix(c(2025,1406, 950, 771, 677, 582), ncol=1, byrow=TRUE)
+rownames(Waves_attended_consecutively) <- c('Wave 1','Wave 2','Wave 3','Wave 4','Wave 5','Wave 6')
+colnames(Waves_attended_consecutively) <- c('Present')
+Waves_attended_consecutivelydf<-as.data.frame(Waves_attended_consecutively)
+Waves_attended_consecutivelydf$Waves <- rownames(Waves_attended_consecutivelydf)
 
 ### Plots for Attrition between waves:
 
-ggplot(tabdf, aes(x = Waves, y = Present, group = 1)) +
+ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Present, group = 1)) +
   geom_line(color = "blue") +
   geom_point(color = "blue", size = 3) +
   labs(title = "Frequency by Waves", x = "Waves", y = "Present") +
   theme_minimal()
 
-tabdf$Percentage <- (tabdf$Present / tabdf$Present[1]) * 100
-ggplot(tabdf, aes(x = Waves, y = Percentage, group = 1)) +
+Waves_attended_consecutivelydf$Percentage <- (Waves_attended_consecutivelydf$Present / Waves_attended_consecutivelydf$Present[1]) * 100
+ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Percentage, group = 1)) +
   geom_line(color = "blue") +
   geom_point(color = "blue", size = 3) +
   labs(title = "Frequency by Waves", x = "Waves", y = "Percentage of Wave 1") +
@@ -420,12 +435,12 @@ ggplot(tabdf, aes(x = Waves, y = Percentage, group = 1)) +
 
 
 ### Depression and wave attrition
-table(mdf4$W1_Present, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4, mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4_5,mdf4$W1_Dep_Severity)
-table(mdf4$presentwave1_2_3_4_5_6,mdf4$W1_Dep_Severity)
+addmargins(table(mdf4$presentwave1, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4, mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4_5,mdf4$W1_Dep_Severity),2)
+addmargins(table(mdf4$presentwave1_2_3_4_5_6,mdf4$W1_Dep_Severity),2)
 
 ### Creating the data frame from the table
 
@@ -961,4 +976,9 @@ wave_table <- xtable(wave_data)
 
 # Print the LaTeX code
 print(wave_table, caption = "Summary of Severity Levels by Waves", label = "tab:severity_waves", caption.placement = "top")
+
+mdf4$W1_Present_new<- 0
+mdf4$W1_Present_new<-ifelse(mdf4$W1_Present == 1,1,0)
+table(mdf4$W1_Present_new)
+
 
