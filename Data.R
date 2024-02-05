@@ -9,6 +9,7 @@ library(xtable)
 library(AICcmodavg)
 library(rmarkdown)
 library(tinytex)
+library(reshape2)
 
 df<-read_sav("C19PRC_UKW1W2_archive_final.sav")
 
@@ -350,6 +351,7 @@ summary(bm1)
 
 ### Reading in all databases:
 
+df<-read_sav("C19PRC_UKW1W2_archive_final.sav")
 df1<-read_sav("C19PRC_UK_W3_archive_final.sav")
 df2<-read_sav("C19PRC_UK_W4_archive_final.sav")
 df3<-read_sav("C19PRC_UKW5_archive_final.sav")
@@ -424,7 +426,10 @@ ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Present, group = 1)) +
   geom_line(color = "blue") +
   geom_point(color = "blue", size = 3) +
   labs(title = "Frequency by Waves", x = "Waves", y = "Present") +
-  theme_minimal()
+  theme_minimal()+
+  ylim(c(0,2100))
+
+
 
 Waves_attended_consecutivelydf$Percentage <- (Waves_attended_consecutivelydf$Present / Waves_attended_consecutivelydf$Present[1]) * 100
 ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Percentage, group = 1)) +
@@ -489,6 +494,25 @@ ggplot(wave_data_long, aes(x = Wave_Number, y = Percentage, color = Severity, gr
   ylim(0,100)
 
 
+### Regression Tests
+
+# Reshape the data to long format
+
+data_long <- melt(wave_data, id.vars = "Severity", variable.name = "Wave", value.name = "Counts")
+
+# Convert Severity to numeric
+severity_mapping <- c('None minimal (0-4)' = 1, 'Mild (5-9)' = 2, 'Moderate (10-14)' = 3, 'Moderately Severe (15-19)' = 4, 'Severe (20-27)' = 5)
+data_long$Severity_Num <- as.numeric(factor(data_long$Severity, levels = names(severity_mapping)))
+
+
+
+# Perform OLS regression
+model <- lm(Counts ~ Wave * Severity_Num, data = data_long)
+
+# Print the summary of the regression model
+summary(model)
+
+
 ### ANOVA of above data
 
 two.way<-aov(wave_data_long$Percentage~wave_data_long$Severity+ wave_data_long$Wave_Number)
@@ -496,36 +520,51 @@ summary(two.way)
 
 TukeyHSD(two.way)
 
+
+
+
+
+####################################################################################################################################
+
+
 ### Number of waves completed and level of depression
-
-mdf4$W3_Type[is.na(mdf4$W3_Type)]<--99
-mdf4$W4_Type[is.na(mdf4$W4_Type)]<--99
-mdf4$W5_Type[is.na(mdf4$W5_Type)]<--99
-mdf4$W6_Type[is.na(mdf4$W6_Type)]<--99
-
-table(mdf4$W3_Type)
 
 mdf4$Waves_attended<-0
 mdf4$Waves_attended <- ifelse(mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
-mdf4$Waves_attended <- ifelse(mdf4$W2_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
-mdf4$Waves_attended <- ifelse(mdf4$W3_Type == 0, mdf4$Waves_attended + 1, mdf4$Waves_attended)
-mdf4$Waves_attended <- ifelse(mdf4$W4_Type == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
-mdf4$Waves_attended <- ifelse(mdf4$W5_Type == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
-mdf4$Waves_attended <- ifelse(mdf4$W6_Type == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W2_Present == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W3_Type == 0 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W4_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W5_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W6_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
 table(mdf4$Waves_attended)
+
+### Putting previous variable into a matrix
+
+Waves_attended_Total <- matrix(c(2025,1757, 1482, 1205, 972, 582), ncol=1, byrow=TRUE)
+rownames(Waves_attended_Total) <- c('1 Wave','2 Waves','3 Waves ','4 Waves','5 Waves','6 Waves')
+colnames(Waves_attended_Total) <- c('Present')
+Waves_attended_Totaldf<-as.data.frame(Waves_attended_Total)
+Waves_attended_Totaldf$Waves <- rownames(Waves_attended_Totaldf)
+
+Waves_attended_Totaldf$Percentage <- (Waves_attended_Totaldf$Present / Waves_attended_Totaldf$Present[1]) * 100
+ggplot(Waves_attended_Totaldf, aes(x = Waves, y = Percentage, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Total Number of Waves completed", x = "Waves", y = "Percentage") +
+  theme_minimal() +
+  ylim(c(0,100))
+
+
 table(mdf4$Waves_attended,mdf4$W1_Dep_Severity)
-table(mdf4$W1_Present, mdf4$W1_Dep_Severity)
-
-
 
 wave_data1 <- data.frame(
   Severity = c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)"),
   At_Least_One_Wave = c(1199, 378, 227, 154, 67),
-  At_Least_Two_Waves = c(1072, 309, 178, 125, 43),
-  At_Least_Three_Waves = c(912, 215, 130, 91, 32),
-  At_Least_Four_Waves = c(754, 187, 97, 63, 23),
-  At_Least_Five_Waves = c(636, 157, 78, 53, 18),
-  All_Six_Waves = c(414, 91, 41, 28, 8)
+  At_Least_Two_Waves = c(1083, 313, 185, 131, 45),
+  At_Least_Three_Waves = c(952, 260, 137, 99, 34),
+  At_Least_Four_Waves = c(797, 204, 104, 76, 24),
+  At_Least_Five_Waves = c(660, 162, 78, 54, 18),
+  All_Six_Waves =       c(414, 91, 41, 28, 8)
 )
 
 custom_colors <- c("None minimal (0-4)" = "darkgreen", "Mild (5-9)"= "lightgreen","Moderate (10-14)" = "orange",
@@ -560,59 +599,43 @@ ggplot(wave_data1_long, aes(x = Waves, y = Percentage, color = Severity, group =
 
 ### Barplot of total number of waves completed by each person
 
-barplot(table(mdf4$Waves_attended),
-ylim = c(0,600),
+barplot(Waves_attended_Totaldf$Present,
+ylim = c(0,2025),
 ylab = "Count",
 xlab = "Total Waves attended",
 main = "Barplot showing Total Number of Waves each Person completed 
 (Assuming they Attended Wave 1 and were not a Top-up)")
 
-### Creating cumulative table
+wave_table_total <- table(mdf4$Waves_attended)
 
-# Get the initial table
-initial_table <- table(mdf4$Waves_attended)
+# Remove the first count (assuming it's the first element)
+wave_table_total  <- wave_table_total[-1]
 
-# Calculate cumulative sums
-cumulative_counts <- cumsum(rev(initial_table))
-
-# Display cumulative counts
-cumulative_counts
-
-reversed_counts <- rev(cumulative_counts)
-
-
-### Counts of waves attended cumulative graph
-
-### Create labels for the bars
-labels <- c('At least one wave', 'At least two waves', 'At least three waves', 'At least four waves', 'At least five waves', 'All six waves')
-
-barplot(reversed_counts, 
-        names.arg = labels,
-        ylim = c(0,2250),
-        xlab = 'Waves Attended', 
-        ylab = 'Number of Individuals',
-        main = 'Number of Individuals Attending at Least a Certain Number of Waves',
-        col = 'skyblue',
-        border = 'black')
-      
-cumulative_percentages <- 100 * cumsum(rev(initial_table)) / sum(initial_table)
+# Plot the bar chart for the frequencies without the first bar
+barplot(wave_table_total,
+        xlab = "Total number of Waves Attended",
+        ylab = "Frequency",
+        main = "Total number of waves atteneded by each responsdant asumming the attened wave 1 
+        and was not a top-up",
+        ylim = c(0,700)
+)
 
 
-### Percentage of waves attended cumulative graph
+### Regression Tests
 
-reversed_percentages <- rev(cumulative_percentages)
-barplot(reversed_percentages, 
-        names.arg = labels, 
-        xlab = 'Waves Attended', 
-        ylab = 'Percentage of Individuals (%)',
-        main = 'Percentage of Individuals Attending at Least a Certain Number of Waves',
-        col = 'lightblue',
-        border = 'black') # horizontal bar plot
+# Reshape the data to long format
+
+data_long1 <- melt(wave_data1, id.vars = "Severity", variable.name = "Wave", value.name = "Counts")
+
+# Convert Severity to numeric
+severity_mapping <- c('None minimal (0-4)' = 1, 'Mild (5-9)' = 2, 'Moderate (10-14)' = 3, 'Moderately Severe (15-19)' = 4, 'Severe (20-27)' = 5)
+data_long1$Severity_Num <- as.numeric(factor(data_long1$Severity, levels = names(severity_mapping)))
 
 
 
-m9<-lm(mdf4$Waves_attended ~mdf4$W1_Depression_Total + mdf4$W1_Overall_Trust +mdf4$W1_Paranoia_Total + mdf4$W1_GAD_Total + mdf4$W1_PTSD_Total + mdf4$W1_ReligiousBelief_Total+ mdf4$W1_Humanity_Total + mdf4$W1_Loneliness_Total+ mdf4$W1_Extraversion_Total+ mdf4$W1_Agreeableness_Total + mdf4$W1_Conscientiousness_Total + mdf4$W1_Neuroticism_Total+mdf4$W1_Openness_Total+ mdf4$W1_Resilience_Total + mdf4$W1_Death_Anxiety_Total +mdf4$W1_Nationalism_Total + mdf4$W1_National_Pride_Total+ mdf4$W1_Conspiracy_Total)
-summary(m9)
+# Perform OLS regression
+model1 <- lm(Counts ~ Wave * Severity_Num, data = data_long1)
+summary(model1)
 
 ####################################################################################################################################
 

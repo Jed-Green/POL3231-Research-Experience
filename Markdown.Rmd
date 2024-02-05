@@ -23,6 +23,7 @@ library(xtable)
 library(AICcmodavg)
 library(rmarkdown)
 library(tinytex)
+library(reshape2)
 ```
 
 As all of our data comes from the longitudinal C19PRC_Uk survey our first step is to merge all of the waves together. The first step is to read in all the different .sav files containing all of the data from the different waves. We did this using "read_sav" from the package Haven as R cannot naturally read in .sav files. The second step was to extract only the variables that are necessary as the data set would be too large if we merged everything. The two variables from each subsequent data set that We selected was "PID" and the "Wave type". This is because the "PID" variable allows us to merge the data based on individuals as each respondent has a unique "PID". In addition we needed the "Wave type" variable from each wave in order to identify who was a recontact and who was a respondent. Finally we merged the data by the "PID" variable in order to get all of our Data into one data set.
@@ -158,7 +159,9 @@ ggplot(Waves_attended_consecutivelydf, aes(x = Waves, y = Present, group = 1)) +
   geom_line(color = "blue") +
   geom_point(color = "blue", size = 3) +
   labs(title = "Frequency by Waves", x = "Waves", y = "Present") +
-  theme_minimal()
+  theme_minimal() +
+  ylim(c(0,2100))
+
 ```
 
 Our next step now that we have conducted some initial descriptive statistics is to compare the attrition rate between the different levels of depression severity. In order to do that we need to calculate the figures. We did this by creating tables showing the respondents who were were present at each wave (and present at all subsequent waves) and their wave 1 depression severity level. For each of the tables below values under the "0" Row represent all those who had dropped out/missed a survey. All values under the "1" row represent all respondents who have completed every survey up to and including the last number listed in the variable. This allows us to see all those who completed all surveys and their given depression severity. Finally the tables also have total columns so that we ensure that "0" and "1" rows add up to the total number contacts at wave one (2025) as this is the baseline from which we are measuring attrition. 
@@ -242,7 +245,7 @@ ggplot(wave_data_long, aes(x = Wave_Number, y = Percentage, color = Severity, gr
   ylim(0,100)
 ```
 
-Finally below is the code for an anvoa test using the data from our long-format data frame in order to test for significance. After this we run a Tukey Post-Hoc test in order to compare the means of every treatment to the means of every other treatment.
+Finally Lets run a few tests for significance:  below is the code for an anvoa test using the data from our long-format data frame in order to test for significance. After this we run a Tukey Post-Hoc test in order to compare the means of every treatment to the means of every other treatment.
 
 ```{r}
 ### ANOVA of above data
@@ -253,3 +256,158 @@ summary(two.way)
 TukeyHSD(two.way)
 ```
 
+We can also run a simple OlS regression. In order to do this we first need to convert our data frame from a wide format to a long format so that it is conducive to our regression. The wide format of our data is not conducive to regression analysis because each observation (or row) should represent a unique combination of the predictor variables. Once we have done that we also need to convert our depression severity measure from a character variable to a numeric one so that it too is conducive to regression analysis. Finally we run our regression with the counts of respondents at each wave as our dependent and an interaction term between the wave number level of depression severity. 
+
+```{r}
+# Reshape the data to long format
+
+data_long <- melt(wave_data, id.vars = "Severity", variable.name = "Wave", value.name = "Counts")
+
+# Convert Severity to numeric
+severity_mapping <- c('None minimal (0-4)' = 1, 'Mild (5-9)' = 2, 'Moderate (10-14)' = 3, 'Moderately Severe (15-19)' = 4, 'Severe (20-27)' = 5)
+data_long$Severity_Num <- as.numeric(factor(data_long$Severity, levels = names(severity_mapping)))
+
+
+
+# Perform OLS regression
+model <- lm(Counts ~ Wave * Severity_Num, data = data_long)
+
+# Print the summary of the regression model
+summary(model)
+```
+
+Interpretation of Coefficients:
+
+Intercept: The intercept of 1151.40 represents the estimated count of attendees when the severity level is at its minimum (0-4) and the wave number is 1.
+Severity_Num: The coefficient of -248.80 for Severity_Num suggests that, on average, for each unit increase in the severity level (measured in the numeric scale), the count of attendees decreases by 248.80, holding the wave constant.
+Wave Coefficients: The coefficients for each wave indicate the change in the count of attendees compared to the reference wave (Wave 1).
+Interaction Terms: The coefficients for the interaction terms represent how the effect of severity level changes across different waves. None of the interaction terms appear to be statistically significant at conventional levels.
+
+
+Now we have explored the attrition rate in terms of Number of waves attended in order it may also be beneficial to explore the same relationship but instead this time using the total number of waves attended by each respondent. This is because respondents may skip a given wave but then rejoin (I.e a respondent may complete wave 1 skip wave 2 and 3 but renter and complete wave 4). Below is how we create the variable for this:
+
+```{r}
+mdf4$Waves_attended<-0
+mdf4$Waves_attended <- ifelse(mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W2_Present == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W3_Type == 0 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W4_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W5_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+mdf4$Waves_attended <- ifelse(mdf4$W6_Type == 1 & mdf4$W1_Present == 1, mdf4$Waves_attended + 1, mdf4$Waves_attended)
+table(mdf4$Waves_attended)
+```
+
+We used the ifelse function to add 1 to the waves_attended variable if a given respondent was present for a given wave regardless if they had completed all of the previous waves or not. Similar to the "Present_XXX" variable created above we used the wave type and present variables to identify whether or not they completed the survey at a given wave. As we can see the total number of people who didn't attended any waves (Waves_attended = 0) is 3339 - this represents all of the Top-ups across all waves. Below is a bar chart of the above data minus the Top-ups
+
+```{r}
+wave_table_total <- table(mdf4$Waves_attended)
+
+# Remove the first count
+wave_table_total  <- wave_table_total[-1]
+
+# Plot the bar chart for the frequencies without the first bar
+barplot(wave_table_total,
+        xlab = "Total number of Waves Attended",
+        ylab = "Frequency",
+        main = "Total number of waves attended by each responsdant asumming they attened wave 1 
+        and was not a top-up",
+        ylim = c(0,700)
+)
+```
+
+The above graph shows how man how many waves each of the respondents attended. It might also be useful to plot this on a line graph to show cumulatively how many attended number of waves. Below is this graph:
+
+```{r}
+### Putting previous variable into a matrix
+
+Waves_attended_Total <- matrix(c(2025,1757, 1482, 1205, 972, 582), ncol=1, byrow=TRUE)
+rownames(Waves_attended_Total) <- c('1 Wave','2 Waves','3 Waves ','4 Waves','5 Waves','6 Waves')
+colnames(Waves_attended_Total) <- c('Present')
+Waves_attended_Totaldf<-as.data.frame(Waves_attended_Total)
+Waves_attended_Totaldf$Waves <- rownames(Waves_attended_Totaldf)
+
+Waves_attended_Totaldf$Percentage <- (Waves_attended_Totaldf$Present / Waves_attended_Totaldf$Present[1]) * 100
+ggplot(Waves_attended_Totaldf, aes(x = Waves, y = Percentage, group = 1)) +
+  geom_line(color = "blue") +
+  geom_point(color = "blue", size = 3) +
+  labs(title = "Total Number of Waves completed", x = "Waves", y = "Percentage") +
+  theme_minimal() +
+  ylim(c(0,100))
+```
+
+This graph shoes how many attended at least each level of waves (I.e 100% completed one wave and around 30% completed all 6 waves) Now that we have created some descriptive statistics we can now go on to explore the impact of depression severity on the number of waves completed. First we need to create a matrix of our results. We can do this by running a table of total number of waves attended and depression severity. Then we can subtract each of these results from wave 1 totals in order to make our matrix:
+
+```{r}
+table(mdf4$Waves_attended,mdf4$W1_Dep_Severity)
+
+wave_data1 <- data.frame(
+  Severity = c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)"),
+  At_Least_One_Wave = c(1199, 378, 227, 154, 67),
+  At_Least_Two_Waves = c(1083, 313, 185, 131, 45),
+  At_Least_Three_Waves = c(952, 260, 137, 99, 34),
+  At_Least_Four_Waves = c(797, 204, 104, 76, 24),
+  At_Least_Five_Waves = c(660, 162, 78, 54, 18),
+  All_Six_Waves =       c(414, 91, 41, 28, 8)
+)
+```
+
+We can then plot this. As with the other results graph above we used the ggplot2 and the tidyr package. We also again had to use the pivot_longer() command which takes our original wide-format data frame wave_data and converts it into a long-format data frame called wave_data_long, where the wave numbers are stacked in a single column named Wave_Number, and the corresponding frequencies are stacked in another column named Frequency. This transformation allows us to then plot this new data frame.:
+
+```{r}
+custom_colors <- c("None minimal (0-4)" = "darkgreen", "Mild (5-9)"= "lightgreen","Moderate (10-14)" = "orange",
+                   "Moderately Severe (15-19)" = "red", "Severe (20-27)" = "darkred")
+legend_order <- c("None minimal (0-4)", "Mild (5-9)", "Moderate (10-14)", "Moderately Severe (15-19)", "Severe (20-27)")
+
+
+wave_data1_long <- wave_data1 %>%
+  pivot_longer(cols = -Severity, names_to = "Waves", values_to = "Counts") %>%
+  mutate(Waves = factor(Waves, levels = c("At_Least_One_Wave", "At_Least_Two_Waves", "At_Least_Three_Waves", "At_Least_Four_Waves", "At_Least_Five_Waves", "All_Six_Waves")))
+
+# Plotting
+ggplot(wave_data1_long, aes(x = Waves, y = Counts, group = Severity, color = Severity)) +
+  geom_line() +
+  labs(title = "Depression Severity Counts Across Waves Completed",
+       x = "Waves",
+       y = "Count") +
+  scale_color_manual(values = custom_colors, breaks = legend_order) +  # You can change the palette if needed
+  theme_minimal()
+```
+
+We can also show this as a percentage of Wave 1:
+
+```{r}
+wave_data1_long <- wave_data1_long %>%
+  group_by(Severity) %>%
+  mutate(Percentage = Counts / Counts[Waves == "At_Least_One_Wave"] * 100)
+
+# Plotting the line graph with percentages relative to Wave 1 on the y-axis
+ggplot(wave_data1_long, aes(x = Waves, y = Percentage, color = Severity, group = Severity)) +
+  geom_line() +
+  scale_color_manual(values = custom_colors, breaks = legend_order) +  # Assigning custom colors and order
+  labs(title = "Percentage of waves completed per person",
+       x = "Number of waves completed", y = "Percentage") +
+  theme_minimal()
+
+```
+
+We can then run a regression again:
+
+```{r}
+### Regression Tests
+
+# Reshape the data to long format
+
+data_long1 <- melt(wave_data1, id.vars = "Severity", variable.name = "Wave", value.name = "Counts")
+
+# Convert Severity to numeric
+severity_mapping <- c('None minimal (0-4)' = 1, 'Mild (5-9)' = 2, 'Moderate (10-14)' = 3, 'Moderately Severe (15-19)' = 4, 'Severe (20-27)' = 5)
+data_long1$Severity_Num <- as.numeric(factor(data_long1$Severity, levels = names(severity_mapping)))
+
+
+
+# Perform OLS regression
+model1 <- lm(Counts ~ Wave * Severity_Num, data = data_long1)
+summary(model1)
+```
+
+while there are differences in how waves are represented between the two models, the significance of predictors and the overall model fit remain similar. The choice between the two representations may depend on the specific research question and the interpretation of the waves.
